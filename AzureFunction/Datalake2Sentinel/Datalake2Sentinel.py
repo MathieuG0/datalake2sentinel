@@ -68,14 +68,12 @@ class Datalake2Sentinel:
         coroutines = []
 
         for query in config.datalake_queries:
-            self.logger.info(
-                f"Creating BulkSearch for {query['query_hash']} query_hash ..."
-            )
+            self.logger.info(f"Creating BulkSearch for {query['query_hash']} query_hash ...")
 
             task = dtl.BulkSearch.create_task(
                 query_hash=query["query_hash"], query_fields=query_fields
             )
-            coroutines.append(task.download_async(output=Output.JSON))
+            coroutines.append(task.download_async(output=Output.JSON, timeout=60 * 60))
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -127,17 +125,11 @@ class Datalake2Sentinel:
                             valid_until=valid_until.isoformat() + "Z",
                             labels=self._create_stix_labels(
                                 input_label=input_label,
-                                threat_types=(
-                                    threat[THREAT_TYPES] if THREAT_TYPES else None
-                                ),
+                                threat_types=(threat[THREAT_TYPES] if THREAT_TYPES else None),
                                 threat_scores=(
-                                    threat[THREAT_SCORES]
-                                    if config.add_score_labels
-                                    else None
+                                    threat[THREAT_SCORES] if config.add_score_labels else None
                                 ),
-                                subcategories=(
-                                    threat[SUBCATEGORIES] if SUBCATEGORIES else None
-                                ),
+                                subcategories=(threat[SUBCATEGORIES] if SUBCATEGORIES else None),
                             ),
                             confidence=max(threat[THREAT_SCORES]),
                             external_references=[
@@ -162,9 +154,7 @@ class Datalake2Sentinel:
 
         return stix_indicators
 
-    def _create_stix_pattern(
-        self, atom_value, atom_type, hashes_md5, hashes_sha1, hashes_sha256
-    ):
+    def _create_stix_pattern(self, atom_value, atom_type, hashes_md5, hashes_sha1, hashes_sha256):
         pattern_format = "[{}:{} = {}]"
 
         if atom_type == "domain" or atom_type == "fqdn":
@@ -177,9 +167,7 @@ class Datalake2Sentinel:
             try:
                 if isinstance(ipaddress.ip_address(atom_value), ipaddress.IPv4Address):
                     return pattern_format.format("ipv4-addr", "value", repr(atom_value))
-                elif isinstance(
-                    ipaddress.ip_address(atom_value), ipaddress.IPv6Address
-                ):
+                elif isinstance(ipaddress.ip_address(atom_value), ipaddress.IPv6Address):
                     return pattern_format.format("ipv6-addr", "value", repr(atom_value))
             except ValueError:
                 pass
@@ -201,9 +189,7 @@ class Datalake2Sentinel:
         else:
             raise Exception(f"Atom type '{atom_type}' is unknown or is not handle")
 
-    def _create_stix_labels(
-        self, input_label, threat_types, threat_scores, subcategories
-    ):
+    def _create_stix_labels(self, input_label, threat_types, threat_scores, subcategories):
         stix_labels = [input_label]
 
         if subcategories:
@@ -248,9 +234,7 @@ class Datalake2Sentinel:
             return acquire_tokens_result["access_token"]
 
     def _batch_post_requests(self, indicators):
-        num_batches = len(indicators) // BATCH_SIZE + (
-            1 if len(indicators) % BATCH_SIZE else 0
-        )
+        num_batches = len(indicators) // BATCH_SIZE + (1 if len(indicators) % BATCH_SIZE else 0)
         access_token = self._getAzureAppToken()
         self.logger.info("Uploading indicators to Azure Sentinel ...")
         self.logger.debug(f"Uploading {num_batches} batches to Azure Sentinel ...")
@@ -276,9 +260,7 @@ class Datalake2Sentinel:
             else:
                 batch_index = batch_index + 1
 
-        self.logger.debug(
-            f"Successful upload of {num_batches} batches to Azure Sentinel"
-        )
+        self.logger.debug(f"Successful upload of {num_batches} batches to Azure Sentinel")
         self.logger.info("Successful upload of Indicators to Azure Sentinel")
 
     @sleep_and_retry
@@ -293,16 +275,12 @@ class Datalake2Sentinel:
 
         data_to_upload = {
             "sourcesystem": SOURCE_SYSTEM_NAME,
-            "indicators": [
-                json.loads(indicator.serialize()) for indicator in indicators
-            ],
+            "indicators": [json.loads(indicator.serialize()) for indicator in indicators],
         }
 
         data_to_upload = json.dumps(data_to_upload)
 
-        response = requests.post(
-            upload_indicator_url, headers=headers, data=data_to_upload
-        )
+        response = requests.post(upload_indicator_url, headers=headers, data=data_to_upload)
 
         if response.status_code == 200:
             self.logger.debug("Successful upload of Indicators to Azure Sentinel")
